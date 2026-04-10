@@ -78,6 +78,11 @@ function getFolderStructure(dir, relativeBase = '', isSsr = false, parentHasMidd
     .replace(/-?index$/, '')     // Remove trailing "index" from name
     .replace(/:/g, '')           // Strip colons from final name
 
+  // Ensure index folders have unique names to avoid collisions with root or parent pages
+  if (segment === 'index') {
+    routeName = routeName ? `${routeName}-index` : 'index-index'
+  }
+
   if (!routeName) routeName = 'index'
 
   // Create the route object if this folder is a route (has page.js) or has children
@@ -240,13 +245,38 @@ export default function PawaRoutes() {
 
         // Extract action names using regex to avoid importing the file
         const actionNames = [];
-        const actionsMatch = code.match(/actions\s*:\s*\{([\s\S]*?)\}/);
-        if (actionsMatch) {
-            const actionsContent = actionsMatch[1];
-            const keyRegex = /^\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/gm;
-            let match;
-            while ((match = keyRegex.exec(actionsContent)) !== null) {
-                actionNames.push(match[1]);
+        const actionsStartMatch = code.match(/actions\s*:\s*\{/);
+        if (actionsStartMatch) {
+            let depth = 0;
+            let endIdx = -1;
+            const startIdx = actionsStartMatch.index + actionsStartMatch[0].indexOf('{');
+
+            for (let i = startIdx; i < code.length; i++) {
+                if (code[i] === '{') depth++;
+                else if (code[i] === '}') {
+                    depth--;
+                    if (depth === 0) {
+                        endIdx = i;
+                        break;
+                    }
+                }
+            }
+
+            if (endIdx !== -1) {
+                const actionsContent = code.substring(startIdx + 1, endIdx);
+                let currentDepth = 0;
+                let sanitizedContent = "";
+                for (let i = 0; i < actionsContent.length; i++) {
+                    const char = actionsContent[i];
+                    if (char === '{') currentDepth++;
+                    sanitizedContent += currentDepth === 0 ? char : " ";
+                    if (char === '}') currentDepth--;
+                }
+                const keyRegex = /([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g;
+                let match;
+                while ((match = keyRegex.exec(sanitizedContent)) !== null) {
+                    actionNames.push(match[1]);
+                }
             }
         }
 

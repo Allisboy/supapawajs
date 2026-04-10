@@ -1,4 +1,3 @@
-import axios from "axios";
 import { setContext, useContext, useInnerContext,isResume, useServer, $state } from "pawajs";
 import { isServer } from "pawajs/server";
 import { PrefetchManager } from '../PreFetchManager.js'
@@ -34,84 +33,75 @@ const parseJsonScript = (id) => {
  */
 export const createAxios = (opts = {}) => {
   const { router, baseURL, messages } = opts;
-
-  // Client-side baseURL can be provided via Vite env or left empty (same-origin).
   const clientBaseURL =
     (typeof import.meta !== "undefined" &&
       import.meta.env &&
-      import.meta.env.VITE_API_BASE_URL) ||
+      import.meta.env.APP_URL) ||
     "";
 
-  const instance = axios.create({
-    baseURL: baseURL || (isServer() ? "" : clientBaseURL),
-    withCredentials: !isServer(),
-    headers: {
-      "X-Requested-With": "XMLHttpRequest",
-    },
-  });
+  const base = baseURL || (isServer() ? "" : clientBaseURL);
 
-  // Attach cookies/host on server to support SSR auth.
-  if (isServer() && router?.req) {
-    const req = router.req;
-    const proto = req.headers["x-forwarded-proto"] || "http";
-    const host = req.headers["x-forwarded-host"] || req.headers.host;
+  const request = async (url, config = {}) => {
+    let fullUrl = url.startsWith('http') ? url : `${base}${url}`;
+    const headers = { ...config.headers, "X-Requested-With": "XMLHttpRequest" };
 
-    if (!instance.defaults.baseURL) {
-      instance.defaults.baseURL = `${proto}://${host}`;
+    // Server-side context (SSR)
+    if (isServer() && router?.req && !url.startsWith('http')) {
+        const req = router.req;
+        const proto = req.headers["x-forwarded-proto"] || "http";
+        const host = req.headers["x-forwarded-host"] || req.headers.host;
+        if (!base) fullUrl = `${proto}://${host}${url}`;
+        if (req.headers.cookie) headers["cookie"] = req.headers.cookie;
     }
 
-    const cookie = req.headers.cookie;
-    if (cookie) {
-      instance.defaults.headers.common["cookie"] = cookie;
+    // Client-side CSRF
+    if (!isServer()) {
+        const method = (config.method || 'GET').toUpperCase();
+        if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+            const token = document.cookie.split('; ').find(row => row.trim().startsWith('XSRF-TOKEN='))?.split('=')[1];
+            if (token) headers['X-CSRF-TOKEN'] = token;
+        }
     }
-  }
 
-  // Client-side: Add CSRF token to state-changing requests
-  if (!isServer()) {
-    instance.interceptors.request.use(config => {
-        if (['post', 'put', 'delete', 'patch'].includes(config.method.toLowerCase())) {
-            const token = document.cookie.split('; ').find(row => row.startsWith('XSRF-TOKEN='))?.split('=')[1];
-            if (token) {
-                config.headers['X-CSRF-TOKEN'] = token;
+    // Handle Request Body
+    if (config.body && !(config.body instanceof FormData) && typeof config.body === 'object') {
+        config.body = JSON.stringify(config.body);
+        headers['Content-Type'] = 'application/json';
+    }
+
+    try {
+        const response = await fetch(fullUrl, {
+            ...config,
+            headers,
+            credentials: isServer() ? 'omit' : 'include'
+        });
+
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        const data = isJson ? await response.json() : await response.text();
+
+        if (!response.ok) {
+            const status = response.status;
+            let message = (data && (data.message || data.error)) || response.statusText || "Request failed";
+            
+            if (messages) {
+                if (status === 429 && messages.RATE_LIMIT) message = messages.RATE_LIMIT;
+                else if (status === 408 && messages.TIMEOUT) message = messages.TIMEOUT;
             }
+
+            throw { ok: false, status, message, data, url: fullUrl, method: config.method || 'GET' };
         }
-        return config;
-    });
-  }
 
-  instance.interceptors.response.use(
-    (res) => res,
-    (err) => {
-      const status = err?.response?.status || 0;
-      const data = err?.response?.data;
-      let message =
-        (data && (data.message || data.error)) ||
-        err?.message ||
-        "Request failed";
-
-      // Apply global messages if available
-      if (messages) {
-        if (status === 429 && messages.RATE_LIMIT) {
-          message = messages.RATE_LIMIT;
-        } else if ((status === 408 || err.code === 'ECONNABORTED') && messages.TIMEOUT) {
-          message = messages.TIMEOUT;
-        }
-      }
-
-      const normalized = {
-        ok: false,
-        status,
-        message,
-        data,
-        url: err?.config?.url,
-        method: err?.config?.method,
-      };
-
-      return Promise.reject(normalized);
+        return { data, status: response.status };
+    } catch (err) {
+        if (err.ok === false) throw err;
+        throw { ok: false, status: 0, message: err.message || "Request failed", url: fullUrl };
     }
-  );
+  };
 
-  return instance;
+  return {
+    get: (url, config) => request(url, { ...config, method: 'GET' }),
+    post: (url, data, config) => request(url, { ...config, method: 'POST', body: data }),
+  };
 };
 
 /**
@@ -236,29 +226,47 @@ export const useParams = () => {
  * @property {any} routeData - Data for the current route
  * @property {any} request - Request context (server only)
  * @property {import('pawajs').State<Partial<Record<keyof T, boolean>>>} loading - Reactive loading states
+ * @property {import('pawajs').State<Partial<Record<keyof T, any>>>} error - Reactive error states
  */
 
 /**
  * Access server actions for a specific route with full IDE type support.
  * 
  * @template {Record<string, (ctx: any) => Promise<any>>} [T=Record<string, any>]
- * @param {string | { server: { route: string, actions: T } }} urlOrConfig - Route URL or the config object from createServerSide
+ * @param {string | { 
+ *  server: { route: string, actions: T }, 
+ *  client: { route: string, actions: string[] } 
+ * }} urlOrConfig - Route URL or the config object from createServerSide
  * @returns {ActionInstance<T>}
  */
 export const useActions = (urlOrConfig) => {
-    const isConfig = urlOrConfig && typeof urlOrConfig === 'object' && urlOrConfig.server;
-    const url = isConfig ? urlOrConfig.server.route : urlOrConfig;
+    const isConfigObject = urlOrConfig && typeof urlOrConfig === 'object' && (urlOrConfig.server || urlOrConfig.client);
+    
+    let url;
+    let clientActionNames = [];
+
+    if (isConfigObject) {
+        // If it's the result of createServerSide, extract from client property
+        url = urlOrConfig.client.route;
+        clientActionNames = urlOrConfig.client.actions;
+    } else {
+        // Otherwise, it's a string URL
+        url = urlOrConfig;
+    }
 
     const resume = isResume()
     const {getServerData,setServerData}=useServer()
     const { actions, request, routeData, http, flashMessage } = useContext(actionContext)
     const action = /** @type {any} */ ({})
     const loading = /** @type {any} */ ($state({}))
-    /**
-     * @type {Array<string>}
-     */
-    const all = actions?.[url] || []
-    const actionNames = isServer() ? Object.keys(all) : all;
+    const error = /** @type {any} */ ($state({}))
+    
+    // On server, `actions` (from actionContext) contains the actual functions.
+    // On client, `actions` (from actionContext) contains an array of names (from ~actions virtual module).
+    // If `urlOrConfig` was a config object, `clientActionNames` already has the names.
+    const actionNames = isServer() 
+        ? Object.keys(actions?.[url] || {}) // Server-side, get actual function names from context
+        : (isConfigObject ? clientActionNames : (actions?.[url] || [])); // Client-side, use clientActionNames if config object, else use ~actions map
     
     for (const actionName of actionNames) {
         if (isServer()) {
@@ -287,7 +295,15 @@ export const useActions = (urlOrConfig) => {
                     return data
                 }
                 loading.value = { ...loading.value, [actionName]: true }
+                error.value = { ...error.value, [actionName]: null }
                 try {
+                    // On static pages, the CSRF cookie might be missing. 
+                    // Fetch it if necessary before the first state-changing request.
+                    const hasToken = document.cookie.split('; ').some(row => row.trim().startsWith('XSRF-TOKEN='));
+                    if (!hasToken) {
+                        await http.get('/_csrf');
+                    }
+
                     let requestData;
                     // Automatically detect and handle FormData for file uploads
                     if (typeof FormData !== 'undefined' && payload instanceof FormData) {
@@ -318,15 +334,16 @@ export const useActions = (urlOrConfig) => {
                     
                     return response.data.data
                     
-                } catch (error) {
+                } catch (err) {
+                    error.value = { ...error.value, [actionName]: err }
                     // Handle error messages from server (e.g. 400/500 responses)
-                    if (error.data && error.data.message) {
+                    if (err.data && err.data.message) {
                         flashMessage.value = {
-                            message: error.data.message,
-                            type: error.data.type || 'error'
+                            message: err.data.message,
+                            type: err.data.type || 'error'
                         }
                     }
-                    throw error
+                    throw err
                 } finally {
                     loading.value = { ...loading.value, [actionName]: false }
                 }

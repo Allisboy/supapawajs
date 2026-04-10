@@ -13,8 +13,11 @@ export interface PawaContext {
     reqData: Record<string, any>;
     title: string;
     description: string;
+    meta: Record<string, string>;
+    csrfToken: string;
     request: IncomingMessage;
     response: ServerResponse;
+    user?: any;
     /** Helper to redirect the user */
     redirect: (url: string, msg?: string, status?: number, type?: string) => void;
     /** Helper to set a flash message */
@@ -38,11 +41,13 @@ export interface CreateServerSideConfig<A = Record<string, (context: PawaContext
     name?: string;
     title?: string;
     description?: string;
+    meta?: Record<string, string>;
     middleware?: Array<(context: PawaContext) => boolean | void | Promise<boolean | void>>;
     actions?: A;
     init?: (context: PawaContext) => Promise<any>;
     rateLimit?: { limit: number; windowMs: number } | false;
     generateParams?: (context: PawaContext) => Promise<Array<Record<string, string>>>;
+    type?: 'ssr' | 'isr' | 'static';
     ssr?: boolean;
     isr?: boolean;
     static?: boolean;
@@ -57,7 +62,7 @@ export interface ActionInstance<T extends Record<string, (ctx: any) => Promise<a
     action: ClientActions<T>;
     http: AxiosInstance;
     routeData: any;
-    request: any;
+    request: PawaContext;
     /** Reactive loading states for each action */
     loading: State<Partial<Record<keyof T, boolean>>>;
     /** Reactive error states for each action */
@@ -113,7 +118,9 @@ export function RouteProgressBar(props: { children: any }): any;
 
 /** Router Logic Exports */
 export function useRouter(): {
-    navigatorTo: (url: string) => void;
+    navigateTo: (url: string) => void;
+    current: () => string;
+    param: () => Record<string, string>;
 };
 export function usePage<T = any>(): {
     data: T;
