@@ -1,11 +1,11 @@
 import { startStreamApp, startApp } from 'pawa-ssr'
 import routes from '~pages'
-import { matchRoute } from '../index.js'
 import crypto from 'node:crypto'
 import { parse, serialize } from 'cookie'
 import fs from 'node:fs';
 import path from 'node:path';
 import Redis from 'ioredis';
+import { matchRoute } from './router.js'
 
 const isDevelopment=process.env.NODE_ENV !== 'production'
 

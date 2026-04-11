@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { AxiosInstance } from 'axios';
-import { State } from 'pawajs';
+import { State,PluginObject  } from 'pawajs';
 import { Plugin } from 'vite';
 
 /**
@@ -18,6 +18,14 @@ export interface PawaContext {
     request: IncomingMessage;
     response: ServerResponse;
     user?: any;
+    session?: any;
+    auth?: {
+        isAuthenticated: boolean;
+        user: any;
+        login: (userData: any) => Promise<void>;
+        logout: () => Promise<void>;
+        update: (userData: any) => Promise<void>;
+    };
     /** Helper to redirect the user */
     redirect: (url: string, msg?: string, status?: number, type?: string) => void;
     /** Helper to set a flash message */
@@ -83,8 +91,8 @@ export function createServerSide<A extends Record<string, (context: PawaContext)
         };
 };
 
-export function handleServerAction(req: any, res: any): Promise<void>;
-export function handleRoutePrefetch(req: any, res: any): Promise<void>;
+export function handleServerAction(req: IncomingMessage, res: ServerResponse): Promise<void>;
+export function handleRoutePrefetch(req: IncomingMessage, res: ServerResponse): Promise<void>;
 export function generateStaticSites(options: { distDir: string }): Promise<void>;
 export function addGlobalMiddleware(...middleware: Array<(ctx: PawaContext) => any>): void;
 
@@ -115,8 +123,10 @@ export function Router(props: { children: any }): any;
 export function RouteView(props: { path: string | (() => string), children: any, intercept?: () => boolean, guard?: () => boolean }): any;
 export function NotFound(props: { path?: string | (() => string), children?: any }): any;
 export function RouteProgressBar(props: { children: any }): any;
+export function ExpressInit(props: { children: any }): any;
 
 /** Router Logic Exports */
+export function RouterPlugin(): PluginObject;
 export function useRouter(): {
     navigateTo: (url: string) => void;
     current: () => string;
@@ -131,25 +141,77 @@ export function usePage<T = any>(): {
 export function PawaRoutes(): Plugin;
 export function PawaScaffold(): Plugin;
 
+
 /** Global State */
 export const user: State<any>;
 export const loadingCount: State<number>;
+export const progress: State<{
+    value: number;
+    visible: boolean;
+    route: string;
+    status: 'idle' | 'loading' | 'starting' | 'complete' | 'error';
+}>;
 
-declare module 'supapawajs' {
-    export * from 'supapawajs/index';
+/** Auth Provider and Options */
+export interface AuthProviderOptions {
+    cookieName?: string;
+    secure?: boolean;
+    sameSite?: 'lax' | 'strict' | 'none';
+    maxAge?: number;
+    path?: string;
+    cookieOptions?: any;
+    ttl?: number;
 }
 
-declare module 'supapawajs/express-init' {
-    // ActionInstance is declared globally, no import needed here.
+export class AuthProvider {
+    constructor(adapter: SessionAdapter, options?: AuthProviderOptions);
+    getSession(req: IncomingMessage): Promise<any>;
+    createSession(res: ServerResponse, data: any): Promise<{ sessionId: string, data: any }>;
+    updateSession(req: IncomingMessage, res: ServerResponse, data: any): Promise<{ sessionId: string, data: any }>;
+    destroySession(req: IncomingMessage, res: ServerResponse): Promise<void>;
+    touchSession(req: IncomingMessage): Promise<void>;
+}
 
-    /** Overload for string URL */
-    export function useActions<T = Record<string, any>>(url: string): ActionInstance<T>;
+/** Session Adapters */
+export abstract class SessionAdapter {
+    abstract get(sessionId: string): Promise<any>;
+    abstract set(sessionId: string, data: any, ttl?: number): Promise<void>;
+    abstract delete(sessionId: string): Promise<void>;
+    abstract touch(sessionId: string, ttl?: number): Promise<void>;
+}
 
-    /** Overload for Config object */
-    export function useActions<T extends Record<string, any>>(
-        config: { 
-            server: { actions: T }; 
-            client: { actions: Array<keyof T> }; 
-        }
-    ): ActionInstance<T>;
+export class SqlAdapter extends SessionAdapter {
+    constructor(db: any, table?: string);
+    get(sessionId: string): Promise<any>;
+    set(sessionId: string, data: any, ttl?: number): Promise<void>;
+    delete(sessionId: string): Promise<void>;
+    touch(sessionId: string, ttl?: number): Promise<void>;
+    createTable(): Promise<void>;
+    cleanup(): Promise<void>;
+}
+
+export class RedisAdapter extends SessionAdapter {
+    constructor(redisClient: any, prefix?: string);
+    get(sessionId: string): Promise<any>;
+    set(sessionId: string, data: any, ttl?: number): Promise<void>;
+    delete(sessionId: string): Promise<void>;
+    touch(sessionId: string, ttl?: number): Promise<void>;
+}
+
+/** Auth Middleware Helpers */
+export function authMiddleware(authProvider: AuthProvider): (ctx: PawaContext) => Promise<boolean>;
+export function requireAuth(redirectTo?: string): (ctx: PawaContext) => Promise<boolean>;
+export function verifiedEmail(redirectTo?: string): (ctx: PawaContext) => Promise<void | boolean>;
+export function requireRole(...roles: string[]): (ctx: PawaContext) => Promise<boolean>;
+export function redirectIfAuth(redirectTo?: string): (ctx: PawaContext) => Promise<boolean>;
+
+
+declare module 'supapawajs' {
+    export * from './index';
+}
+
+declare module 'supapawajs/plugins' {
+    import { Plugin } from 'vite';
+    export function PawaRoutes(): Plugin;
+    export function PawaScaffold(): Plugin;
 }

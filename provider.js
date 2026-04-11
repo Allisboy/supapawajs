@@ -1,13 +1,10 @@
-// src/pawajs/auth/provider.js
 import crypto from 'node:crypto'
 import { parse, serialize } from 'cookie'
-
-
 
 export class AuthProvider {
     constructor(adapter, options = {}) {
         this.adapter = adapter
-        this.cookieName = options.cookieName || 'pawa_session'
+        this.cookieName = options.cookieName || 'supa_session'
         this.cookieOptions = {
             httpOnly: true,
             secure: options.secure !== false,

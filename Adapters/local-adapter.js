@@ -1,5 +1,4 @@
-// src/pawajs/auth/adapters/memory.js
-import { SessionAdapter } from './base.js'
+import { SessionAdapter } from '../Session-Adapter.js'
 
 export class MemoryAdapter extends SessionAdapter {
     constructor() {

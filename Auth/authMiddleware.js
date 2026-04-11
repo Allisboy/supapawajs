@@ -1,5 +1,3 @@
-
-
 /**
  * Auth middleware - loads session into router context
  */
@@ -84,7 +82,7 @@ export const requireAuth = (redirectTo = '/login') => {
 /**
  * Require email verified
  */
-export const verifiedEmail=(redirectTo='/settings')=>{
+export const verifiedEmail=(redirectTo='/')=>{
     return async (router)=>{
         if(!router.user.emailVerification){
             router.redirect(redirectTo,"Email not verified! Please verify your email")

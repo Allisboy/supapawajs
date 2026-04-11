@@ -6,7 +6,7 @@ function hashSessionId(id) {
     .update(id)
     .digest('hex')
 }
-export class DatabaseAdapter extends SessionAdapter {
+export class SqlAdapter extends SessionAdapter {
     /**
      * @param {object} db - Database client (pg, mysql2, etc)
      * @param {string} table - Table name
