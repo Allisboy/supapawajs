@@ -1,6 +1,6 @@
-import { usePage } from "@/Router"
+import { usePage } from "./router.js"
 import { components, html, isResume, RegisterComponent, render, runEffect, useAsync, useValidateComponent } from "pawajs"
-import { isServer } from "pawajs/server"
+import { isServer } from "pawajs/server.js"
 /**
  * @param {{imports: ()=>Promise, children: string, error: ()=>string, loading: ()=>string}} props
  * @description Dynamically imports and renders a component. It handles loading, error, and success states,

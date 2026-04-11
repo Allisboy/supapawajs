@@ -6,7 +6,7 @@ import { Plugin } from 'vite';
 /**
  * Context provided to server-side functions (init, actions, middleware)
  */
-export interface PawaContext {
+interface PawaContext {
     url: string;
     param: Record<string, string>;
     query: Record<string, string>;
@@ -45,7 +45,7 @@ type ClientActions<T> = {
 /**
  * Configuration object for createServerSide
  */
-export interface CreateServerSideConfig<A = Record<string, (context: PawaContext) => Promise<any>>> {
+interface CreateServerSideConfig<A = Record<string, (context: PawaContext) => Promise<any>>> {
     name?: string;
     title?: string;
     description?: string;
@@ -65,7 +65,7 @@ export interface CreateServerSideConfig<A = Record<string, (context: PawaContext
 /**
  * The object returned by useActions()
  */
-export interface ActionInstance<T extends Record<string, (ctx: any) => Promise<any>>> {
+interface ActionInstance<T extends Record<string, (ctx: any) => Promise<any>>> {
     /** Callable server actions with full type safety and reactive state */
     action: ClientActions<T>;
     http: AxiosInstance;
@@ -76,66 +76,6 @@ export interface ActionInstance<T extends Record<string, (ctx: any) => Promise<a
     /** Reactive error states for each action */
     error: State<Partial<Record<keyof T, any>>>;
 }
-
-/** Core Exports */
-export function createServerSide<A extends Record<string, (context: PawaContext) => Promise<any>>>(
-    config: CreateServerSideConfig<A>
-): {
-    server: CreateServerSideConfig<A> & { route: string };
-        client: { 
-            init: boolean; 
-            route: string; 
-            name: string; 
-            middleware: boolean;
-            actions: Array<keyof A>; // Add actions here
-        };
-};
-
-export function handleServerAction(req: IncomingMessage, res: ServerResponse): Promise<void>;
-export function handleRoutePrefetch(req: IncomingMessage, res: ServerResponse): Promise<void>;
-export function generateStaticSites(options: { distDir: string }): Promise<void>;
-export function addGlobalMiddleware(...middleware: Array<(ctx: PawaContext) => any>): void;
-
-/** Hook Exports (from express-init) */
-/** Overload for string URL */
-export function useActions<T = Record<string, any>>(url: string): ActionInstance<T>;
-
-/** Overload for Config object */
-export function useActions<T extends Record<string, any>>(
-    config: { 
-        server: { actions: T }; 
-        client: { actions: Array<keyof T> }; 
-    }
-): ActionInstance<T>;
-
-export function useFlash(): {
-    message: State<{ message: string; type: string } | null>;
-    show: (msg: string, type?: string) => void;
-    clear: () => void;
-};
-
-export function useQuery(): State<Record<string, string>>;
-export function useParams(): State<Record<string, string>>;
-export function useSupport(): any;
-
-/** Router Component Exports */
-export function Router(props: { children: any }): any;
-export function RouteView(props: { path: string | (() => string), children: any, intercept?: () => boolean, guard?: () => boolean }): any;
-export function NotFound(props: { path?: string | (() => string), children?: any }): any;
-export function RouteProgressBar(props: { children: any }): any;
-export function ExpressInit(props: { children: any }): any;
-
-/** Router Logic Exports */
-export function RouterPlugin(): PluginObject;
-export function useRouter(): {
-    navigateTo: (url: string) => void;
-    current: () => string;
-    param: () => Record<string, string>;
-};
-export function usePage<T = any>(): {
-    data: T;
-    error: any;
-};
 
 /** Vite Plugins */
 export function PawaRoutes(): Plugin;
@@ -198,20 +138,108 @@ export class RedisAdapter extends SessionAdapter {
     touch(sessionId: string, ttl?: number): Promise<void>;
 }
 
-/** Auth Middleware Helpers */
-export function authMiddleware(authProvider: AuthProvider): (ctx: PawaContext) => Promise<boolean>;
-export function requireAuth(redirectTo?: string): (ctx: PawaContext) => Promise<boolean>;
-export function verifiedEmail(redirectTo?: string): (ctx: PawaContext) => Promise<void | boolean>;
-export function requireRole(...roles: string[]): (ctx: PawaContext) => Promise<boolean>;
-export function redirectIfAuth(redirectTo?: string): (ctx: PawaContext) => Promise<boolean>;
+/** 
+ * SERVER ENTRY POINT (supapawajs/server)
+ * Contains Node.js specifics, ISR, and SSG logic.
+ */
+declare module 'supapawajs/server' {
+    import { IncomingMessage, ServerResponse } from 'node:http';
+    import { PawaContext, CreateServerSideConfig, AuthProvider } from 'supapawajs';
 
+    export function createServerSide<A extends Record<string, (context: PawaContext) => Promise<any>>>(
+        config: CreateServerSideConfig<A>
+    ): {
+        server: CreateServerSideConfig<A> & { route: string };
+        client: { 
+            init: boolean; 
+            route: string; 
+            name: string; 
+            middleware: boolean;
+            actions: Array<keyof A>;
+        };
+    };
 
-declare module 'supapawajs' {
-    export * from './index';
+    export function handleServerAction(req: IncomingMessage, res: ServerResponse): Promise<void>;
+    export function handleRoutePrefetch(req: IncomingMessage, res: ServerResponse): Promise<void>;
+    export function generateStaticSites(options: { distDir: string }): Promise<void>;
+    export function addGlobalMiddleware(...middleware: Array<(ctx: PawaContext) => any>): void;
+    export function handleCsrfToken(req: IncomingMessage, res: ServerResponse): Promise<void>;
+
+    /** Auth Middleware Helpers */
+    export function authMiddleware(authProvider: AuthProvider): (ctx: PawaContext) => Promise<boolean>;
+    export function requireAuth(redirectTo?: string): (ctx: PawaContext) => Promise<boolean>;
+    export function verifiedEmail(redirectTo?: string): (ctx: PawaContext) => Promise<void | boolean>;
+    export function requireRole(...roles: string[]): (ctx: PawaContext) => Promise<boolean>;
+    export function redirectIfAuth(redirectTo?: string): (ctx: PawaContext) => Promise<boolean>;
 }
 
-declare module 'supapawajs/plugins' {
-    import { Plugin } from 'vite';
-    export function PawaRoutes(): Plugin;
-    export function PawaScaffold(): Plugin;
+/** 
+ * ROUTER ENTRY POINT (supapawajs/router)
+ * Pure UI components and browser-friendly routing logic.
+ */
+declare module 'supapawajs/router' {
+    import { PluginObject } from 'pawajs';
+
+    export function Router(props: { children: any }): any;
+    export function RouteView(props: { path: string | (() => string), children: any, intercept?: () => boolean, guard?: () => boolean }): any;
+    export function NotFound(props: { path?: string | (() => string), children?: any }): any;
+    export function RouteProgressBar(props: { children: any }): any;
+    export function RouteEntry(): any;
+
+    export function RouterPlugin(): PluginObject;
+    export function useRouter(): {
+        navigateTo: (url: string) => void;
+        current: () => string;
+        param: () => Record<string, string>;
+    };
+    export function usePage<T = any>(): {
+        data: T;
+        error: any;
+    };
+}
+
+/** 
+ * INITIALIZATION ENTRY POINT (supapawajs/express-init)
+ * Isomorphic hooks and the provider component.
+ */
+declare module 'supapawajs/express-init' {
+    import { State } from 'pawajs';
+    import { ActionInstance } from 'supapawajs';
+
+    export function ExpressInit(props: { children: any }): any;
+
+    /** Overload for string URL */
+    export function useActions<T = Record<string, any>>(url: string): ActionInstance<T>;
+
+    /** Overload for Config object */
+    export function useActions<T extends Record<string, any>>(
+        config: { 
+            server: { actions: T }; 
+            client: { actions: Array<keyof T> }; 
+        }
+    ): ActionInstance<T>;
+
+    export function useFlash(): {
+        message: State<{ message: string; type: string } | null>;
+        show: (msg: string, type?: string) => void;
+        clear: () => void;
+    };
+
+    export function useQuery(): State<Record<string, string>>;
+    export function useParams(): State<Record<string, string>>;
+    export function useSupport(): any;
+}
+
+declare module 'supapawajs' {
+    export * from 'supapawajs/server';
+    // Re-export common types for root usage
+    export { PawaContext, CreateServerSideConfig, ActionInstance };
+}
+
+declare module 'supapawajs/store'{
+    export const user: State<any>;
+}
+
+declare module 'supapawajs/progress'{
+    export * from 'supapawajs/progress'
 }

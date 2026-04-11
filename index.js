@@ -1,5 +1,5 @@
 import { startStreamApp, startApp } from 'pawa-ssr'
-import routes from '~pages'
+
 import crypto from 'node:crypto'
 import { parse, serialize } from 'cookie'
 import fs from 'node:fs';
@@ -7,6 +7,15 @@ import path from 'node:path';
 import Redis from 'ioredis';
 import { matchRoute } from './router.js'
 
+let routes = []
+const setServer=({route})=>{
+    routes=route
+    RouterConfig(routes)
+    buildRouteMaps()
+}
+export {
+    setServer
+}
 const isDevelopment=process.env.NODE_ENV !== 'production'
 
 
@@ -57,11 +66,6 @@ const isrCache = {
         memoryCache.delete(key);
     }
 };
-
-// console.log(routes);
-
-
-
 export const addGlobalMiddleware = (...middleware) => {
     middleware.forEach(m => globalMiddlewares.push(m))
 }
@@ -176,7 +180,7 @@ const RouterConfig = (dRoutes = []) => {
 }
 
 
-RouterConfig(routes)
+
 
 // console.log(routes,'server side');
 
@@ -867,7 +871,7 @@ async function loadRouteData(routeConfigs, router, parentChain = true, options =
     // Run all in parallel with Promise.allSettled (never throws)
     const results = await Promise.allSettled(dataLoaders);
     const generateMetaData = async (config) => {
-        if (!config || !config.route) return;
+        if (!config || config.route === undefined) return;
         const getPage = routeArray.find(r => r.route === config.route);
         if (getPage && getPage.hasComponent && getPage.component) {
             const { meta: metaExport } = await getPage.component();

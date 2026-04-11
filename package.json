@@ -1,6 +1,6 @@
 {
   "name": "supapawajs",
-  "version": "0.0.2",
+  "version": "0.0.24",
   "description": "pawajs meta-framework with express",
   "keywords": [
     "framework",
@@ -22,6 +22,18 @@
   "author": "Allwell Oriso-owubo Owupele",
   "type": "module",
   "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./server": "./index.js",
+    "./router": "./router.js",
+    "./express-init": "./express-init.js",
+    "./store":"./store",
+    "./progress":"./progress",
+    "./import-component":"./import-component.js",
+      "./PreFetchManager":"./PreFetchManager.js",
+      "./vite-plugin-pawa-scaffold":"./vite-plugin-pawa-scaffold.js",
+      "./vite-plugin-pawa-routes":"./vite-plugin-pawajs-routes.js"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

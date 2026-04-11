@@ -1,6 +1,6 @@
 import { setContext, useContext, useInnerContext,isResume, useServer, $state } from "pawajs";
-import { isServer } from "pawajs/server";
-import { PrefetchManager } from '../PreFetchManager.js'
+import { isServer } from "pawajs/server.js";
+import { PrefetchManager } from './PreFetchManager.js'
 import { user } from "./store.js";
 
 const actionContext = setContext();

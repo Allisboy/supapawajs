@@ -54,7 +54,7 @@ export default createServerSide({
                             console.log(`\x1b[32m[PawaJS]\x1b[0m Automated scaffold: Generated config for ${routePath}`)
                         } else if (isPage) {
                             const pageTemplate = `import { html, useInsert } from "pawajs";
-import { usePage } from "supapawajs";
+import { usePage } from "supapawajs/router";
 
 export const meta = {
     title: '${pageName.charAt(0).toUpperCase() + pageName.slice(1)}',

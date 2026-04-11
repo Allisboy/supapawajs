@@ -1,5 +1,4 @@
-import { loadingCount } from "./serverSide/store"
-import { matchRoute } from "./index.js" // Import your route matching function
+import { matchRoute } from "./router.js" // Import your route matching function
 
 // supapawajs prefetch
 class PrefetchManager {

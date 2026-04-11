@@ -1,12 +1,15 @@
-import { components, getCurrentContext, html, isResume } from "pawajs"
-import { $state, runEffect,setContext,useContext,useInsert, RegisterComponent,useValidateComponent, useInnerContext } from "pawajs"
+import { $state, runEffect,setContext,useContext,useInsert, RegisterComponent,useValidateComponent, useInnerContext,html, isResume, components } from "pawajs"
 import {isServer} from 'pawajs/server.js'
-import routes from '~pages'
 import { ImportComponent } from "./import-component.js"
-import { useSupport } from "./serverSide/express-init.js"
-import { completeProgress, errorProgress, progress, simulateProgress, updateProgress } from "./progress"
+import { useSupport } from "./express-init.js"
+import { completeProgress, errorProgress, progress, simulateProgress, updateProgress } from "./progress.js"
 
 
+let routes=[]
+export const setRoutes=(r)=>{
+  routes=r
+  RouterConfig(routes)
+}
 /**
  * @type {Array<{name:string,group:Array<string>,routeNames:Array<string>,route:string}>}
  */
@@ -16,7 +19,7 @@ const routeMap=new Map()
 const intersetMap=new Map()
 const availableRoute=new Map()
 export const routeConfigs=()=>[routeArray,routeMap]
-// console.log(routes)
+
 /**
  * @typedef {{name:string,routeNames:Array<>,route:string,group:string}} RouteTypes
  */
@@ -123,7 +126,6 @@ export function enhanceHistoryAPI() {
         dispatchPushEvent()
       })
     }
-    // console.log(routes);
     const count=$state(0)
     const actualRoute=$state('')
     
@@ -209,7 +211,7 @@ export const Router=({children})=>{
   const { clientRouting, prefetchManager , loadData, flashMessage} = useSupport()
   if(!isServer()){
   prefetchManager.setRouteArray(routeArray)
-  }
+ }
   const isRoute=$state({
     param:{},
     routeNames:[],
@@ -249,7 +251,6 @@ export const Router=({children})=>{
         newNames.push(v)
       })
       newNames.forEach(n => extendRoute.push(n))
-        console.log(extendRoute);
         // Find common parent between old and new routes
         const commonParent = formerRouteNames.find(v => newNames.includes(v))
         if (!commonParent) return null
@@ -524,7 +525,6 @@ export const usePage = () => {
 export const RouteView=({children,path,intercept,guard})=>{
   const {isRoute}=useContext(routeContexts)
   const {routeData,prefetchManager}=useSupport()
-  // console.log(isResume(), 'route-view',getCurrentContext());
   const isDynamic=path().includes(':')
   let data
   let parent
@@ -542,21 +542,24 @@ export const RouteView=({children,path,intercept,guard})=>{
   if (!parent && !dRoutes ) {
     dRoutes='/'
   }
+  
   if (intercept?.()) {
     dRoutes=path()
   }
-  const routes=routeArray.filter((value)=>value.route === dRoutes)  
+  const routers=routeArray.filter((value)=>value.route === dRoutes)  
   let myRouteDifinition
   if (newPath === '' && path() === '' && parent) {
-    myRouteDifinition=routes[0]
+    myRouteDifinition=routers[0]
   }else if(newPath === '' && path() === '' && !parent){
-    myRouteDifinition=routes.length > 1?routes[1] : route[0]
+    myRouteDifinition=routers.length > 1?routers[1] : routers[0]
   }
-  else if(routes[1]){
-    myRouteDifinition=routes[1]
+  else if(routers[1]){
+    myRouteDifinition=routers[1]
   }else{
-    myRouteDifinition=routes[0]
+    myRouteDifinition=routers[0]
   }
+  
+  
   loadingRoute.value[dRoutes]=false
   const isRouteLoading=()=>loadingRoute.value[dRoutes]
   const isRouteError=()=>errorRoute.value[dRoutes]
@@ -577,7 +580,6 @@ export const RouteView=({children,path,intercept,guard})=>{
     dRoutes=path()
     const {route,currentRouteDif}=useContext(routeViewContext)
     const current=currentRouteDif
-    console.log(current);
     
     const interceptS=myRouteDifinition.routeNames
     
@@ -683,14 +685,11 @@ export const NotFound = ({ path, children }) => {
     } catch (error) {
       
     }    
-    // console.log(viewContext,path());
     const condition = () => {
         const targetPath = path();
         
         // 1. Explicit path match (e.g. <not-found path="/admin">)
         if (targetPath) {
-          console.log(targetPath,'target');
-          
             return isRoute.value.notfound === targetPath;
         }
 
