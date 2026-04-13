@@ -1183,7 +1183,7 @@ export const handleRoutePrefetch = async (req, res) => {
             routeMapsCached = true
         }
         
-        const { route, parentRoute=true,params={},actualUrl } = req.body
+        const { route, parentRoute=true, params={}, query: bodyQuery = {}, actualUrl } = req.body
         
         if (!route) {
             return res.status(400).json({
@@ -1193,6 +1193,7 @@ export const handleRoutePrefetch = async (req, res) => {
         }
         // Create router context
         const router = createRouter(req, res)
+        router.query = { ...router.query, ...bodyQuery }
         // If dynamic params were provided, merge them
   if (Object.keys(params).length > 0) {
       // Use the dynamic params for data loading
@@ -1616,7 +1617,7 @@ async function renderPathToHtml(routePath, params, { html, context, template }) 
             html,
             {
                 ...context,
-                url: routePath, // Ensure the renderer knows the current static path
+                url: routePath === ''?'/':routePath, // Ensure the renderer knows the current static path
                 routeData,
                 allAction: Object.fromEntries(actionsRoute), // Pass the full actions map
                 router

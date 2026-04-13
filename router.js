@@ -34,13 +34,12 @@ const routeEntry=(dRoutes,parentRoute)=>{
         const component = value.component || value.load
         const configRoute={
             name:'',
-            // Cleanly join paths and remove trailing slashes to prevent duplicate matches
             route: parentRoute 
                 ? `${parentRoute.route === '/' ? '' : parentRoute.route}/${path}`.replace(/\/+$/, '') 
                 : path.replace(/\/+$/, ''),
             routeNames:parentRoute?[...parentRoute?.routeNames] :[],
             notfound:'',
-            // propagate render style from vite-plugin
+            acceptQuery:value.inQuery,
             render: value.render,
             revalidate: value.revalidate,
             children:children || []
@@ -208,7 +207,7 @@ const route=$state('')
 const loadingRoute=$state({})
 const errorRoute=$state({message:''})
 export const Router=({children})=>{  
-  const { clientRouting, prefetchManager , loadData, flashMessage} = useSupport()
+  const { clientRouting, prefetchManager , loadData, flashMessage, query} = useSupport()
   if(!isServer()){
   prefetchManager.setRouteArray(routeArray)
  }
@@ -218,7 +217,10 @@ export const Router=({children})=>{
     notfound:'',
     name:'',
     route:'',
-    generalNotFound:false
+    generalNotFound:false,
+    fullUrl:'',
+    keyUrl: '',
+    shallow:false
   })
   if(routeArray.length === 0 && routes){
     RouterConfig(routes)
@@ -226,13 +228,13 @@ export const Router=({children})=>{
   const loading=$state(false)
   if(isServer()){
         const {url}=useInnerContext()
-        route.value = new URL(url, 'http://localhost').pathname
+        route.value = url === "" ?'/' : url
     }else{
-        route.value=window.location.pathname
+        route.value = window.location.pathname + window.location.search
     }
-    const navigateTo=(url)=>{
+    const navigateTo=(url, options = {})=>{
       Promise.resolve().then(()=>{
-        history.pushState({},"",url)
+        history.pushState(options, "", url)
         requestAnimationFrame(() => window.scrollTo({ top: 0 }));
       })
     }
@@ -311,7 +313,10 @@ export const Router=({children})=>{
               notfound: matched[0].notfound,
               route: '',
               name: matched[0].name,
-              generalNotFound: true
+              generalNotFound: true,
+              fullUrl: path,
+              keyUrl: path,
+              shallow: false
           }
       } else if (latestPath !== '') {
           // Continue searching up the path hierarchy
@@ -325,16 +330,35 @@ export const Router=({children})=>{
               notfound: '',
               name:'',
               route:'',
-              generalNotFound: true
+              generalNotFound: true,
+              fullUrl: path,
+              keyUrl: path,
+              shallow: false
           }
       }
     }
 
     const init=()=>{
+      const url = new URL(route.value, isServer() ? 'http://localhost' : window.location.origin);
+      const pathname = url.pathname;
+      if (!isServer()) {
+          const updateQuery = () => {
+        const urlParams = new URLSearchParams(window.location.search)
+        const queryObject = {}
+        for (const [key, value] of urlParams.entries()) {
+            queryObject[key] = value
+        }
+        query.value = queryObject
+    }
+    updateQuery()
+      }
+      const state = !isServer() ? (history.state || {}) : {};
+      const isShallow = state.shallow || false;
+
       const newParams = {}
       
       const current = routeArray.filter((value) => {
-        const [match,param]=  matchRoute(value.route,route.value);
+        const [match,param]=  matchRoute(value.route, pathname);
         if(param){
           Object.assign(newParams,param)
         }
@@ -361,14 +385,20 @@ export const Router=({children})=>{
 
         const { extendRoute, parentFetches } = resolved
 
-        if (isServer() || enter === false) {
+        if (isServer() || enter === false || isShallow) {
+        const keyUrl = (isShallow && enter) ? isRoute.value.keyUrl : route.value;
+        
+        
         isRoute.value={
           routeNames:extendRoute,
           param:newParams,
           notfound:'',
           route:current[0].route,
           name:current[0].name,
-          generalNotFound:false
+          generalNotFound:false,
+          fullUrl: route.value,
+          keyUrl: keyUrl,
+          shallow: isShallow
         }
         loadingRoute.value = { ...loadingRoute.value, [current[0].route]: false };
         }else{
@@ -427,7 +457,10 @@ export const Router=({children})=>{
                             notfound: '',
                             route: current[0].route,
                             name: current[0].name,
-                            generalNotFound: false
+                            fullUrl: route.value,
+                            keyUrl: route.value,
+                            generalNotFound: false,
+                            shallow: false
                         }
                         
                         // Clear loading state for this route
@@ -455,23 +488,24 @@ export const Router=({children})=>{
   
   }
   if(isServer())init()
-    runEffect(()=>{
+    runEffect(() => {
+        if (isServer()) return;
         enhanceHistoryAPI();
-         const pop=(e) => {
-      const newPath = window.location.pathname
-    const oldPath = route.value
-    
-    // Only update if path changed
-    if (newPath !== oldPath) {
-        route.value = newPath
-    }
-      
-    }
-    window.addEventListener('pushchange', pop);
-    init()
-    },0)
+        const pop = (e) => {
+            const newPath = window.location.pathname + window.location.search
+            const oldPath = route.value
+            if (newPath !== oldPath) {
+                route.value = newPath
+            }
+        }
+        window.addEventListener('pushchange', pop);
+        init();
+        return () => {
+            window.removeEventListener('pushchange', pop);
+        }
+    }, 0)
     runEffect(()=>{
-      route.value=window.location.pathname
+      route.value = window.location.pathname + window.location.search
         return ()=>{
             init()   
         }
@@ -523,9 +557,8 @@ export const usePage = () => {
     return {...entry}
 }
 export const RouteView=({children,path,intercept,guard})=>{
-  const {isRoute}=useContext(routeContexts)
+  const {isRoute, route: routeState}=useContext(routeContexts)
   const {routeData,prefetchManager}=useSupport()
-  const isDynamic=path().includes(':')
   let data
   let parent
   try {
@@ -559,7 +592,6 @@ export const RouteView=({children,path,intercept,guard})=>{
     myRouteDifinition=routers[0]
   }
   
-  
   loadingRoute.value[dRoutes]=false
   const isRouteLoading=()=>loadingRoute.value[dRoutes]
   const isRouteError=()=>errorRoute.value[dRoutes]
@@ -579,10 +611,6 @@ export const RouteView=({children,path,intercept,guard})=>{
   if (isIntercepted && !isServer()) {
     dRoutes=path()
     const {route,currentRouteDif}=useContext(routeViewContext)
-    const current=currentRouteDif
-    
-    const interceptS=myRouteDifinition.routeNames
-    
     runEffect(()=>{
       intersetMap.set(path(),currentRouteDif)
       return()=> {
@@ -590,7 +618,7 @@ export const RouteView=({children,path,intercept,guard})=>{
       }
     })
   }
-  
+  const isDynamic=path().includes(':') || myRouteDifinition.acceptQuery && myRouteDifinition.render === 'ssr'
   routeViewContext.setValue({route:dRoutes,currentRouteDif:myRouteDifinition})
   const name=routeMap.get(myRouteDifinition?.name) || {name:''}
   const loader=name?.load
@@ -613,20 +641,31 @@ export const RouteView=({children,path,intercept,guard})=>{
       return false
     }
   }
-
+  const routeControl=routeMap.get(myRouteDifinition.name) || {name:''}
+  if (loadingLoader && !isServer() && routeControl?.loadingLoad) {
+    const loader=routeControl?.loadingLoad
+   loader()
+  }
+  if (error && !isServer() && routeControl?.error) {
+   const loader=routeControl?.error
+   loader()
+  }
   const routeKey = () => {
-    if (!isDynamic) return dRoutes;
-    // Extract the keys from the pattern, e.g., ":id" -> "id"
+    const currentUrl = isRoute.value.keyUrl || isRoute.value.fullUrl || '';
+    const url = new URL(currentUrl, isServer() ? 'http://localhost' : window.location.origin);
+    const isTerminal = isRoute.value.route === dRoutes;
+    const search = (isTerminal && url.search) ? url.search : '';
+
+    if (!isDynamic) return dRoutes + search;
+    
     const paramKeys = path().match(/:[a-zA-Z0-9_$]+/g) || [];
-    // Map them to the current reactive values in isRoute.param
     const paramValues = paramKeys.map(pk => isRoute.value.param[pk.slice(1)] || '').join('-');
-    // Return a composite key: e.g., "/profile/:id-69ca8f..."
-    return `${dRoutes}-${paramValues}`;
+    return `${dRoutes}-${paramValues}${search}`;
   }
 
    useInsert({condition,loader,underRoute,loadingLoader,error,isRouteErrorFalse,isRouteLoading,isRouteToFalse,isRouteError, routeKey,name})
   return html `
-    <template >
+    <template>
       ${loadingLoader ? html `
         <route-loading if="isRouteLoading()" :route="'${myRouteDifinition.name}'"></route-loading>
         `:''}
@@ -637,18 +676,16 @@ export const RouteView=({children,path,intercept,guard})=>{
       <import-component if="condition()" ${isDynamic? 'key="routeKey()"':''} :imports="loader" :loading="isRouteToFalse" ${name?.childViews?':child="name.childViews"' : ''}>
         ${children}
       </import-component>
-   
     </template>
   `
 }
 
 export const RouteLoading=async({route,children})=>{
   const dRoutes=route()
-  const routeIsLoading=()=>loadingRoute.value[dRoutes]
   const name=routeMap.get(dRoutes) || {name:''}
   const loader=name?.loadingLoad
-  const {Loading}=await loader()
-  components.set('LOADINGROUTECOMPONENT',Loading)
+  const compo=await loader()
+  components.set('LOADINGROUTECOMPONENT',compo?.default)
     return html `
     <div>
       <loading-route-component></loading-route-component>
@@ -687,15 +724,9 @@ export const NotFound = ({ path, children }) => {
     }    
     const condition = () => {
         const targetPath = path();
-        
-        // 1. Explicit path match (e.g. <not-found path="/admin">)
         if (targetPath) {
             return isRoute.value.notfound === targetPath;
         }
-
-        // 2. Local RouteView boundary match
-        // If we are inside a RouteView, check if this is the active 404 boundary for this scope
-      
          if (viewContext && viewContext?.currentRouteDif.name === isRoute.value.name && isRoute.value.notfound) {
              return true;
          }
@@ -704,7 +735,6 @@ export const NotFound = ({ path, children }) => {
         
     const getLoader = () => {
         const route = isRoute.value.notfound;
-        // Return the specific 404.js loader if it exists, otherwise a no-op promise
         return  routeMap.get(viewContext?.currentRouteDif?.name || 'index')?.notfoundLoad
     };
 
@@ -753,4 +783,4 @@ export const RouteEntry=()=>{
   }
   return '<div> route entry</div>'
 }
-RegisterComponent(ImportComponent,RouteLoading,RouteError,NotFound,RouteView)
+RegisterComponent('ImportComponent',ImportComponent,'RouteLoading',RouteLoading,'RouteError',RouteError,'NotFound',NotFound,'RouteView',RouteView,'Router',Router)

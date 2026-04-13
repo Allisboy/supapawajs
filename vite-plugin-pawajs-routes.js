@@ -7,11 +7,13 @@ const pagesDir = normalizePath(path.resolve(process.cwd(), 'src/pages'))
 function getConfigDetails(dir, configFile) {
   if (!configFile) return { hasMiddleware: false, isSsr: false, isIsr: false, isStatic: false, revalidate: null, hasGenerateParams: false }
   try {
+    
     const configPath = path.join(dir, configFile.name)
     const content = fs.readFileSync(configPath, 'utf-8')
     const hasMiddleware = /middleware\s*[:=]/.test(content)
     const isSsr = /ssr\s*[:=]\s*true/.test(content) || /type\s*[:=]\s*['"]ssr['"]/.test(content)
     const isIsr = /isr\s*[:=]\s*true/.test(content) || /type\s*[:=]\s*['"]isr['"]/.test(content)
+    const queryPage = /pageQuery\s*[:=]\s*true/.test(content) 
     const isStatic = /static\s*[:=]\s*true/.test(content) || /type\s*[:=]\s*['"]static['"]/.test(content)
     const hasGenerateParams = /generateParams\s*[:=]/.test(content)
 
@@ -22,9 +24,9 @@ function getConfigDetails(dir, configFile) {
         revalidate = parseInt(revalidateMatch[1], 10)
       }
     }
-    return { hasMiddleware, isSsr, isIsr, isStatic, revalidate, hasGenerateParams }
+    return { hasMiddleware, isSsr, isIsr, isStatic, revalidate, hasGenerateParams,queryPage }
   } catch (e) {
-    return { hasMiddleware: false, isSsr: false, isIsr: false, isStatic: false, revalidate: null, hasGenerateParams: false }
+    return { hasMiddleware: false, isSsr: false, isIsr: false, isStatic: false, revalidate: null, hasGenerateParams: false,queryPage:false }
   }
 }
 
@@ -93,7 +95,7 @@ function getFolderStructure(dir, relativeBase = '', isSsr = false, parentHasMidd
   if (pageFile || children.length > 0 || configFile) {
     // Determine render style: SSR (Explicit or Middleware) > ISR > Static (Default)
     let render = 'static'
-    
+    let queryPage=false
     // Middleware forces SSR for security (cookies/auth headers are dynamic)
     if (configDetails.isSsr || currentHasMiddleware) {
       render = 'ssr'
@@ -101,6 +103,9 @@ function getFolderStructure(dir, relativeBase = '', isSsr = false, parentHasMidd
       render = 'isr'
     } else if (configDetails.isStatic) {
       render = 'static'
+    }
+     if(configDetails.queryPage){
+      queryPage=true
     }
 
     const getEffectiveChildPaths = (nodes) => {
@@ -125,6 +130,7 @@ function getFolderStructure(dir, relativeBase = '', isSsr = false, parentHasMidd
       name: routeName,
       path: routePath,
       render,
+      inQuery:queryPage,
       childViews,
       notfound: notFoundFile ? `() => import('${normalizePath(path.join(dir, notFoundFile.name))}')` : false,
       loading: loadingFile ? `() => import('${normalizePath(path.join(dir, loadingFile.name))}')` : false,

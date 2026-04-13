@@ -1,4 +1,4 @@
-import { usePage } from "./router.js"
+import { usePage,useRouteState } from "./router.js"
 import { components, html, isResume, RegisterComponent, render, runEffect, useAsync, useValidateComponent } from "pawajs"
 import { isServer } from "pawajs/server.js"
 /**
@@ -6,7 +6,7 @@ import { isServer } from "pawajs/server.js"
  * @description Dynamically imports and renders a component. It handles loading, error, and success states,
  * and is compatible with server-side rendering and client-side resumption.
  */
-export const ImportComponent = async ({ imports, children, error, loading , pageFor,child}) => {
+export const ImportComponent = async ({ imports, children, error, loading , pageFor,child,routes}) => {
     const {onSuspense}=useAsync()
     const func=imports()
     const loader=loading?.() || ''
@@ -22,8 +22,12 @@ export const ImportComponent = async ({ imports, children, error, loading , page
         if(page?.default === undefined) return children || html`<div class="p-4 bg-yellow-50 border border-yellow-200 text-yellow-600 rounded">Warning: Component loaded but no default export found.</div>`
         const meta=page?.meta
         if (meta && typeof meta === 'function' && !isServer() && !resume) {
-            const data=usePage()
-            const getMeta=meta(data?.data || {})
+            const {prefetchManager}=useSupport()
+            const {route}=useRouteState()
+            const cached=prefetchManager.getCached(route.value)
+            const routePayload = cached?.data?.[routes()] || {}
+            const data=routePayload?.data
+            const getMeta=meta(data || {})
             document.title=getMeta.title
         }else if(meta?.title && !isServer() && !resume){
             document.title=meta.title
@@ -57,5 +61,6 @@ useValidateComponent(ImportComponent, {
     error: { type: String, default:  ()=>false  },
     loading: { type: Function, default:  ()=>false },
     pageFor: { type: String, default: 'route' },
-    child: { type: String, default: '' }
+    child: { type: String, default: '' },
+    routes: { type: String, default: '' }
 })

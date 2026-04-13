@@ -19,13 +19,15 @@ class PrefetchManager {
      * @returns {boolean}
      */
     shouldPrefetch(route) {
+        const pathname = route.includes('?') ? route.split('?')[0] : route;
+        
         // First, check exact match in static routes
-        if (this.prefetchRoutes.hasOwnProperty(route)) {
+        if (this.prefetchRoutes.hasOwnProperty(pathname)) {
             return true
         }
         
         // Then, check dynamic route patterns
-        const matchedRoute = this._matchDynamicRoute(route)
+        const matchedRoute = this._matchDynamicRoute(pathname)
         if (matchedRoute) {
             // Check if the matched pattern needs prefetching
             return this.prefetchRoutes.hasOwnProperty(matchedRoute.pattern)
@@ -96,9 +98,12 @@ class PrefetchManager {
      * @returns {Promise<any>}
      */
     async prefetch(route, parentRouteFetch = false, options = {}) {
-        // First, try to match dynamic route pattern
-        const dynamicRoute = this._matchDynamicRoute(route)
-        const effectiveRoute = dynamicRoute ? dynamicRoute.pattern : route
+        const url = new URL(route, window.location.origin);
+        const pathname = url.pathname;
+        const searchParams = Object.fromEntries(url.searchParams);
+
+        const dynamicRoute = this._matchDynamicRoute(pathname)
+        const effectiveRoute = dynamicRoute ? dynamicRoute.pattern : pathname
         
         // Check if already cached under pattern or exact URL
         if (this.cache.has(route)) {
@@ -112,7 +117,7 @@ class PrefetchManager {
         }
 
         // Check if needs prefetch
-        if (!this.shouldPrefetch(route)) {
+        if (!this.shouldPrefetch(pathname)) {
             return null
         }
 
@@ -122,7 +127,8 @@ class PrefetchManager {
         // Build request payload with dynamic params if available
         const payload = { 
             route: effectiveRoute, 
-            parentRoute 
+            parentRoute,
+            query: searchParams
         }
         
         // Add dynamic params to the request if this is a dynamic route

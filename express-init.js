@@ -1,4 +1,4 @@
-import { setContext, useContext, useInnerContext,isResume, useServer, $state } from "pawajs";
+import { setContext, useContext, useInnerContext,isResume, useServer, $state, runEffect } from "pawajs";
 import { isServer } from "pawajs/server.js";
 import { PrefetchManager } from './PreFetchManager.js'
 import { user } from "./store.js";
@@ -176,6 +176,25 @@ export const ExpressInit = ({ children }) => {
     
     
   }
+  
+  runEffect(() => {
+    if (isServer()) return;
+    const updateQuery = () => {
+        const urlParams = new URLSearchParams(window.location.search)
+        const queryObject = {}
+        for (const [key, value] of urlParams.entries()) {
+            queryObject[key] = value
+        }
+        query.value = queryObject
+    }
+    window.addEventListener('popstate', updateQuery)
+    window.addEventListener('pushchange', updateQuery)
+    return () => {
+        window.removeEventListener('popstate', updateQuery)
+        window.removeEventListener('pushchange', updateQuery)
+    }
+  })
+
   const http = createAxios({ router: request, messages });
   if (!isServer()) {
      // Create prefetch manager
