@@ -1,5 +1,5 @@
-import { usePage,useRouteState } from "./router.js"
-import { components, html, isResume, RegisterComponent, render, runEffect, useAsync, useValidateComponent } from "pawajs"
+import { useRouteState } from "./router.js"
+import { components, html, isResume, useAsync, useValidateComponent } from "pawajs"
 import { isServer } from "pawajs/server.js"
 /**
  * @param {{imports: ()=>Promise, children: string, error: ()=>string, loading: ()=>string}} props

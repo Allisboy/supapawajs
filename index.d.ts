@@ -1,7 +1,7 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
-import { AxiosInstance } from 'axios';
 import { State,PluginObject  } from 'pawajs';
 import { Plugin } from 'vite';
+import { HttpClient } from './express-init';
 
 /**
  * Context provided to server-side functions (init, actions, middleware)
@@ -35,11 +35,18 @@ interface PawaContext {
 }
 
 /** Internal helper to extract reqData type from an action function */
-type InferActionArg<F> = F extends (ctx: { reqData: infer P } & any) => any ? P : any;
+type InferActionArg<F> = F extends (ctx: infer C, ...args: any[]) => any 
+    ? (C extends { reqData: infer P } ? P : any) 
+    : any;
+
+/** Internal helper to extract the return type of the init function from a createServerSide config */
+export type InferInitData<T> = T extends { server: { init?: (...args: any[]) => Promise<infer R> } } 
+    ? R 
+    : any;
 
 /** Internal helper to map server actions to client calls */
 type ClientActions<T> = {
-    [K in keyof T]: (payload: InferActionArg<T[K]>) => ReturnType<T[K] extends (...args: any) => any ? T[K] : any>
+    [K in keyof T]: (payload?: InferActionArg<T[K]>) => Promise<T[K] extends (...args: any) => Promise<infer R> ? R : any>
 };
 
 /**
@@ -68,7 +75,7 @@ interface CreateServerSideConfig<A = Record<string, (context: PawaContext) => Pr
 interface ActionInstance<T extends Record<string, (ctx: any) => Promise<any>>> {
     /** Callable server actions with full type safety and reactive state */
     action: ClientActions<T>;
-    http: AxiosInstance;
+    http: HttpClient;
     routeData: any;
     request: PawaContext;
     /** Reactive loading states for each action */
@@ -138,14 +145,6 @@ export class RedisAdapter extends SessionAdapter {
     touch(sessionId: string, ttl?: number): Promise<void>;
 }
 
-/** 
- * SERVER ENTRY POINT (supapawajs/server)
- * Contains Node.js specifics, ISR, and SSG logic.
- */
-declare module 'supapawajs/server' {
-    import { IncomingMessage, ServerResponse } from 'node:http';
-    import { PawaContext, CreateServerSideConfig, AuthProvider } from 'supapawajs';
-
     export function createServerSide<A extends Record<string, (context: PawaContext) => Promise<any>>>(
         config: CreateServerSideConfig<A>
     ): {
@@ -171,70 +170,10 @@ declare module 'supapawajs/server' {
     export function verifiedEmail(redirectTo?: string): (ctx: PawaContext) => Promise<void | boolean>;
     export function requireRole(...roles: string[]): (ctx: PawaContext) => Promise<boolean>;
     export function redirectIfAuth(redirectTo?: string): (ctx: PawaContext) => Promise<boolean>;
-}
 
-/** 
- * ROUTER ENTRY POINT (supapawajs/router)
- * Pure UI components and browser-friendly routing logic.
- */
-declare module 'supapawajs/router' {
-    import { PluginObject } from 'pawajs';
 
-    export function Router(props: { children: any }): any;
-    export function RouteView(props: { path: string | (() => string), children: any, intercept?: () => boolean, guard?: () => boolean }): any;
-    export function NotFound(props: { path?: string | (() => string), children?: any }): any;
-    export function RouteProgressBar(props: { children: any }): any;
-    export function RouteEntry(): any;
-
-    export function RouterPlugin(): PluginObject;
-    export function useRouter(): {
-        navigateTo: (url: string) => void;
-        current: () => string;
-        param: () => Record<string, string>;
-    };
-    export function usePage<T = any>(): {
-        data: T;
-        error: any;
-    };
-}
-
-/** 
- * INITIALIZATION ENTRY POINT (supapawajs/express-init)
- * Isomorphic hooks and the provider component.
- */
-declare module 'supapawajs/express-init' {
-    import { State } from 'pawajs';
-    import { ActionInstance } from 'supapawajs';
-
-    export function ExpressInit(props: { children: any }): any;
-
-    /** Overload for string URL */
-    export function useActions<T = Record<string, any>>(url: string): ActionInstance<T>;
-
-    /** Overload for Config object */
-    export function useActions<T extends Record<string, any>>(
-        config: { 
-            server: { actions: T }; 
-            client: { actions: Array<keyof T> }; 
-        }
-    ): ActionInstance<T>;
-
-    export function useFlash(): {
-        message: State<{ message: string; type: string } | null>;
-        show: (msg: string, type?: string) => void;
-        clear: () => void;
-    };
-
-    export function useQuery(): State<Record<string, string>>;
-    export function useParams(): State<Record<string, string>>;
-    export function useSupport(): any;
-}
-
-declare module 'supapawajs' {
-    export * from 'supapawajs/server';
-    // Re-export common types for root usage
     export { PawaContext, CreateServerSideConfig, ActionInstance };
-}
+
 
 declare module 'supapawajs/store'{
     export const user: State<any>;
